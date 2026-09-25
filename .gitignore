@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*_reviews.csv
+*_reviews.json
+*_reviews.xlsx

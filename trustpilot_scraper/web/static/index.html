@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Avis Trustpilot</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <h1><span class="logo">★</span> Extracteur d'avis Trustpilot</h1>
+    <p class="muted">Indique une marque, récupère tous ses avis, exporte-les en CSV, Excel ou JSON.</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <form id="form" class="card">
+    <div class="row main-row">
+      <input id="brand" name="brand" required autocomplete="off"
+             placeholder="Domaine ou URL Trustpilot (ex : getstryde.co)">
+      <button type="submit" id="go" class="primary">Récupérer les avis</button>
+    </div>
+    <details>
+      <summary>Options</summary>
+      <div class="options">
+        <fieldset>
+          <legend>Notes</legend>
+          <div class="stars-pick">
+            <label><input type="checkbox" name="stars" value="5"> 5★</label>
+            <label><input type="checkbox" name="stars" value="4"> 4★</label>
+            <label><input type="checkbox" name="stars" value="3"> 3★</label>
+            <label><input type="checkbox" name="stars" value="2"> 2★</label>
+            <label><input type="checkbox" name="stars" value="1"> 1★</label>
+          </div>
+          <small class="muted">Rien de coché = toutes les notes</small>
+        </fieldset>
+        <label>Langue
+          <select name="languages">
+            <option value="all">Toutes</option>
+            <option value="fr">Français</option>
+            <option value="en">Anglais</option>
+            <option value="de">Allemand</option>
+            <option value="es">Espagnol</option>
+            <option value="it">Italien</option>
+            <option value="nl">Néerlandais</option>
+          </select>
+        </label>
+        <label>Pages max
+          <input type="number" name="max_pages" min="1" placeholder="toutes">
+        </label>
+        <label>Pause entre pages (s)
+          <input type="number" name="delay" min="0.5" max="10" step="0.5" value="1.5">
+        </label>
+      </div>
+    </details>
+    <p id="form-error" class="error" hidden></p>
+  </form>
+
+  <section id="job" class="card" hidden>
+    <div class="job-head">
+      <div>
+        <h2 id="biz-name">—</h2>
+        <a id="biz-link" class="muted" target="_blank" rel="noopener"></a>
+      </div>
+      <div class="score" id="biz-score" hidden>
+        <span class="big" id="biz-trust"></span>
+        <span class="muted">TrustScore · <span id="biz-total"></span> avis</span>
+      </div>
+    </div>
+
+    <div id="progress-box">
+      <div class="progress"><div id="bar"></div></div>
+      <div class="row between">
+        <span id="progress-text" class="muted">Démarrage…</span>
+        <button id="cancel" type="button" class="ghost">Arrêter</button>
+      </div>
+    </div>
+
+    <p id="job-error" class="error" hidden></p>
+    <ul id="warnings" class="warnings" hidden></ul>
+
+    <div id="results" hidden>
+      <div class="stats">
+        <div class="stat"><span class="big" id="st-count">0</span><span class="muted">avis récupérés</span></div>
+        <div class="stat"><span class="big" id="st-avg">–</span><span class="muted">note moyenne</span></div>
+        <div class="stat"><span class="big" id="st-replied">0</span><span class="muted">avec réponse</span></div>
+        <div class="stat"><span class="big" id="st-verified">0</span><span class="muted">vérifiés</span></div>
+        <div class="dist" id="dist"></div>
+      </div>
+
+      <div class="row exports">
+        <span class="muted">Exporter :</span>
+        <a class="btn" id="ex-csv">CSV</a>
+        <a class="btn" id="ex-xlsx">Excel</a>
+        <a class="btn" id="ex-json">JSON</a>
+      </div>
+
+      <div class="row filters">
+        <input id="q" type="search" placeholder="Rechercher dans les avis…">
+        <select id="f-stars">
+          <option value="">Toutes les notes</option>
+          <option>5</option><option>4</option><option>3</option><option>2</option><option>1</option>
+        </select>
+        <select id="f-sort">
+          <option value="date-desc">Plus récents</option>
+          <option value="date-asc">Plus anciens</option>
+          <option value="rating-desc">Meilleures notes</option>
+          <option value="rating-asc">Pires notes</option>
+        </select>
+        <span id="f-count" class="muted"></span>
+      </div>
+
+      <div id="list"></div>
+      <div class="row center">
+        <button id="more" type="button" class="ghost" hidden>Afficher plus</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="history-box" class="card" hidden>
+    <h3>Extractions récentes</h3>
+    <ul id="history"></ul>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

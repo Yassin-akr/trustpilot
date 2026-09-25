@@ -1,0 +1,92 @@
+:root {
+  --bg: #f6f7f9;
+  --card: #ffffff;
+  --text: #191919;
+  --muted: #6b6f76;
+  --border: #e3e5e8;
+  --accent: #00b67a;
+  --accent-ink: #ffffff;
+  --error: #c62828;
+  --warn-bg: #fff6e0;
+  --s1: #ff3722; --s2: #ff8622; --s3: #ffce00; --s4: #73cf11; --s5: #00b67a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111315;
+    --card: #1b1e21;
+    --text: #eceef0;
+    --muted: #9aa0a6;
+    --border: #2c3035;
+    --warn-bg: #3a3020;
+    --error: #ff6b6b;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.wrap { max-width: 1000px; margin: 0 auto; padding: 0 16px; }
+.top { padding: 28px 0 12px; }
+h1 { margin: 0; font-size: 1.6rem; }
+h2 { margin: 0; font-size: 1.3rem; }
+h3 { margin: 0 0 8px; font-size: 1rem; }
+.logo { color: var(--accent); }
+.muted { color: var(--muted); }
+.card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 18px; margin: 16px 0;
+}
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.between { justify-content: space-between; }
+.center { justify-content: center; margin-top: 12px; }
+input, select, button, .btn {
+  font: inherit; color: var(--text); background: var(--card);
+  border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px;
+}
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.main-row input { flex: 1 1 320px; min-width: 0; }
+button, .btn { cursor: pointer; text-decoration: none; display: inline-block; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button:disabled { opacity: .6; cursor: default; }
+button.ghost:hover, .btn:hover { border-color: var(--accent); }
+details { margin-top: 12px; }
+summary { cursor: pointer; color: var(--muted); }
+.options { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; align-items: flex-start; }
+.options label { display: flex; flex-direction: column; gap: 4px; font-size: .9rem; }
+.options input[type=number] { width: 130px; }
+fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 0; padding: 6px 12px 10px; }
+legend { font-size: .9rem; padding: 0 4px; }
+.stars-pick { display: flex; gap: 10px; flex-wrap: wrap; }
+.stars-pick label { flex-direction: row; align-items: center; gap: 4px; }
+.error { color: var(--error); margin: 10px 0 0; }
+.warnings { background: var(--warn-bg); border-radius: 8px; padding: 8px 8px 8px 28px; font-size: .9rem; }
+
+.job-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: center; }
+.score { display: flex; flex-direction: column; align-items: flex-end; }
+@media (max-width: 600px) { .score { align-items: flex-start; } }
+.big { font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
+.progress { height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; margin: 16px 0 8px; }
+#bar { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+
+.stats { display: flex; flex-wrap: wrap; gap: 20px; margin: 18px 0; align-items: center; }
+.stat { display: flex; flex-direction: column; min-width: 100px; }
+.dist { flex: 1 1 240px; display: grid; gap: 4px; }
+.dist-row { display: grid; grid-template-columns: 28px 1fr 40px; gap: 8px; align-items: center; font-size: .85rem; }
+.dist-bar { height: 10px; background: var(--border); border-radius: 99px; overflow: hidden; }
+.dist-bar > div { height: 100%; }
+.exports { margin-bottom: 14px; }
+.filters input { flex: 1 1 220px; min-width: 0; }
+
+.review { border-top: 1px solid var(--border); padding: 14px 0; }
+.review-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: .9rem; }
+.stars { letter-spacing: 1px; font-size: 1rem; }
+.review h4 { margin: 6px 0 4px; font-size: 1rem; }
+.review p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.reply { margin-top: 8px; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--bg); border-radius: 0 8px 8px 0; font-size: .9rem; }
+.badge { font-size: .75rem; border: 1px solid var(--border); border-radius: 99px; padding: 1px 8px; margin-left: 6px; }
+mark { background: #ffe36e; color: #191919; }
+
+#history { list-style: none; margin: 0; padding: 0; }
+#history li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); font-size: .9rem; }
+#history a { color: var(--text); }
