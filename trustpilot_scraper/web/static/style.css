@@ -55,6 +55,7 @@ summary { cursor: pointer; color: var(--muted); }
 .options { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; align-items: flex-start; }
 .options label { display: flex; flex-direction: column; gap: 4px; font-size: .9rem; }
 .options input[type=number] { width: 130px; }
+.options label.inline { flex-direction: row; align-items: center; gap: 6px; align-self: flex-end; padding-bottom: 10px; }
 fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 0; padding: 6px 12px 10px; }
 legend { font-size: .9rem; padding: 0 4px; }
 .stars-pick { display: flex; gap: 10px; flex-wrap: wrap; }

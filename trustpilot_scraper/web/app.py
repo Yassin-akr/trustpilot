@@ -28,6 +28,8 @@ class JobRequest(BaseModel):
     languages: str = ""
     max_pages: int | None = Field(default=None, ge=1)
     delay: float = Field(default=1.5, ge=0.5, le=10)
+    engine: str = Field(default="auto", pattern="^(auto|http|browser)$")
+    show_browser: bool = False
 
 
 class Job:
@@ -54,6 +56,8 @@ class Job:
                     languages=self.req.languages,
                     max_pages=self.req.max_pages,
                     delay=self.req.delay,
+                    engine=self.req.engine,
+                    show_browser=self.req.show_browser,
                 ),
                 on_progress=self._on_progress,
                 cancel_event=self.cancel_event,
@@ -75,7 +79,7 @@ class Job:
                 self.warnings = self.scraper.warnings
 
     def _on_progress(self, info: dict):
-        self.progress = {k: info[k] for k in ("page", "pages", "count")}
+        self.progress = {k: info.get(k) for k in ("page", "pages", "count", "engine")}
         self.business = info.get("business") or self.business
 
     @property

@@ -31,6 +31,8 @@ $("#form").addEventListener("submit", async (e) => {
     languages: fd.get("languages"),
     max_pages: fd.get("max_pages") ? Number(fd.get("max_pages")) : null,
     delay: Number(fd.get("delay") || 1.5),
+    engine: fd.get("engine"),
+    show_browser: fd.get("show_browser") === "on",
   };
   $("#form-error").hidden = true;
   $("#go").disabled = true;
@@ -113,7 +115,9 @@ function renderJob(job) {
   $("#bar").style.width = `${job.status === "done" ? 100 : pct}%`;
   const labels = {
     queued: "En attente…",
-    running: p.pages ? `Page ${p.page} / ${p.pages} — ${p.count} avis` : "Connexion à Trustpilot…",
+    running: p.pages
+      ? `Page ${p.page} / ${p.pages} — ${p.count} avis${p.engine === "browser" ? " (navigateur)" : ""}`
+      : "Connexion à Trustpilot…",
   };
   $("#progress-text").textContent = labels[job.status] || "";
   $("#progress-box").hidden = !(job.status in labels);

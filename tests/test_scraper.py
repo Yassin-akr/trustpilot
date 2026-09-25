@@ -89,6 +89,7 @@ PAGES = {
 
 
 def fast_opts(**kw):
+    kw.setdefault("engine", "http")
     return ScrapeOptions(delay=0, **kw)
 
 
@@ -146,7 +147,38 @@ def test_default_request_matches_original_script():
 def test_403_explained(monkeypatch):
     s = TrustpilotScraper("getstryde.co", fast_opts(), session=FakeSession({1: (403, "")}))
     monkeypatch.setattr(s, "_sleep", lambda _: None)
-    with pytest.raises(ScraperError, match="anti-robots"):
+    with pytest.raises(sc.Blocked, match="mode navigateur"):
+        s.run()
+
+
+def test_auto_switches_to_browser_when_blocked(monkeypatch):
+    http = FakeSession({1: (403, "")})
+    browser = FakeSession(PAGES)
+    browser.closed = False
+    browser.close = lambda: setattr(browser, "closed", True)
+    s = TrustpilotScraper(
+        "getstryde.co",
+        fast_opts(engine="auto"),
+        session=http,
+        browser_factory=lambda: browser,
+    )
+    monkeypatch.setattr(s, "_sleep", lambda _: None)
+    assert len(s.run()) == 5
+    assert len(http.calls) == 1  # un seul essai HTTP avant de basculer
+    assert len(browser.calls) == 3
+    assert s.engine_used == "browser"
+    assert browser.closed
+    assert "navigateur" in s.warnings[0]
+
+
+def test_browser_mode_still_blocked(monkeypatch):
+    s = TrustpilotScraper(
+        "getstryde.co",
+        fast_opts(engine="browser", retries=2),
+        browser_factory=lambda: FakeSession({1: (403, "")}),
+    )
+    monkeypatch.setattr(s, "_sleep", lambda _: None)
+    with pytest.raises(sc.Blocked, match="4G, VPN"):
         s.run()
 
 
@@ -196,6 +228,7 @@ def test_web_api(monkeypatch):
     orig_init = TrustpilotScraper.__init__
 
     def fake_init(self, brand, options=None, session=None, **kw):
+        options.engine = "http"
         orig_init(self, brand, options, session=FakeSession(PAGES), **kw)
 
     monkeypatch.setattr(webapp.TrustpilotScraper, "__init__", fake_init)

@@ -79,6 +79,10 @@ class NotFound(ScraperError):
     pass
 
 
+class Blocked(ScraperError):
+    """Trustpilot refuse la requête (HTTP 403, protection anti-robots)."""
+
+
 class Cancelled(Exception):
     pass
 
@@ -188,6 +192,8 @@ class ScrapeOptions:
     delay: float = 1.5  # secondes entre deux pages (politesse)
     retries: int = 3
     timeout: int = 30
+    engine: str = "auto"  # "auto" (HTTP, puis navigateur si bloqué), "http" ou "browser"
+    show_browser: bool = False  # afficher la fenêtre du navigateur (mode navigateur)
 
     def query(self, page: int) -> dict:
         q: dict = {}
@@ -211,15 +217,52 @@ class TrustpilotScraper:
         session=None,
         on_progress: ProgressCallback | None = None,
         cancel_event: threading.Event | None = None,
+        browser_factory: Callable[[], object] | None = None,
     ):
         self.domain, self.host = normalize_domain(brand)
         self.options = options or ScrapeOptions()
-        self.session = session or make_session()
+        self._session = session
+        self._browser_factory = browser_factory or self._default_browser
+        self.engine_used: str | None = None
         self.on_progress = on_progress or (lambda _: None)
         self.cancel_event = cancel_event or threading.Event()
         self.business: dict = {}
         self.warnings: list[str] = []
         self.collected: dict[str, dict] = {}  # accessible même si on annule en cours
+
+    def _default_browser(self):
+        from .browser import BrowserSession
+
+        return BrowserSession(headless=not self.options.show_browser)
+
+    def _can_use_browser(self) -> bool:
+        from .browser import playwright_available
+
+        return self._browser_factory != self._default_browser or playwright_available()
+
+    def _open(self, engine: str):
+        self.close()
+        if engine == "browser":
+            if not self._can_use_browser():
+                raise ScraperError(
+                    "Le mode navigateur nécessite Playwright : pip install playwright"
+                )
+            try:
+                self.session = self._browser_factory()
+            except RuntimeError as e:
+                raise ScraperError(str(e))
+        else:
+            self.session = self._session or make_session()
+        self.engine_used = engine
+
+    def close(self):
+        s = getattr(self, "session", None)
+        if s is not None and s is not self._session and hasattr(s, "close"):
+            try:
+                s.close()
+            except Exception:  # noqa: BLE001
+                pass
+        self.session = None
 
     @property
     def base_url(self) -> str:
@@ -238,10 +281,11 @@ class TrustpilotScraper:
         if self.cancel_event.wait(seconds):
             raise Cancelled()
 
-    def fetch_page(self, page: int) -> dict | None:
+    def fetch_page(self, page: int, retries: int | None = None) -> dict | None:
         """Retourne le JSON de la page, ou None si la page n'existe pas (404)."""
+        retries = retries or self.options.retries
         last_err: Exception | None = None
-        for attempt in range(1, self.options.retries + 1):
+        for attempt in range(1, retries + 1):
             self._check_cancel()
             try:
                 r = self.session.get(self.page_url(page), timeout=self.options.timeout)
@@ -249,7 +293,9 @@ class TrustpilotScraper:
                     if page == 1:
                         raise NotFound(f"Marque introuvable sur Trustpilot : {self.domain}")
                     return None
-                if r.status_code in (403, 429) or r.status_code >= 500:
+                if r.status_code == 403:
+                    raise Blocked("HTTP 403")
+                if r.status_code == 429 or r.status_code >= 500:
                     raise ScraperError(f"HTTP {r.status_code}")
                 r.raise_for_status()
                 return parse_next_data(r.text)
@@ -257,20 +303,39 @@ class TrustpilotScraper:
                 raise
             except (*NETWORK_ERRORS, ScraperError, json.JSONDecodeError) as e:
                 last_err = e
-                if attempt < self.options.retries:
+                if attempt < retries:
                     self._sleep(min(2**attempt * 2, 30))  # 4s, 8s, 16s...
-        msg = f"Page {page} : échec après {self.options.retries} essais ({last_err})"
-        if "HTTP 403" in str(last_err):
-            msg += (
-                ". Trustpilot bloque la requête (protection anti-robots)."
-                + ("" if curl_requests else " Installe curl_cffi : pip install curl_cffi.")
-                + " Attends quelques minutes ou change de connexion (4G, VPN) puis réessaie."
-            )
+        msg = f"Page {page} : échec après {retries} essai(s) ({last_err})"
+        if isinstance(last_err, Blocked):
+            msg += ". Trustpilot bloque la requête (protection anti-robots)."
+            if self.engine_used == "http":
+                msg += " Essaie le mode navigateur (--engine browser)."
+            msg += " Sinon, attends quelques minutes ou change de connexion (4G, VPN)."
+            raise Blocked(msg)
         raise ScraperError(msg)
 
     def run(self) -> list[dict]:
         """Récupère tous les avis, triés du plus récent au plus ancien."""
-        first = self.fetch_page(1)
+        try:
+            return self._run()
+        finally:
+            self.close()
+
+    def _fetch_first(self) -> dict:
+        engine = self.options.engine
+        self._open("browser" if engine == "browser" else "http")
+        if engine != "auto" or not self._can_use_browser():
+            return self.fetch_page(1)
+        try:
+            # En auto, inutile d'insister en HTTP : un seul essai avant le navigateur
+            return self.fetch_page(1, retries=1)
+        except Blocked:
+            self.warnings.append("Requêtes HTTP bloquées : passage en mode navigateur.")
+            self._open("browser")
+            return self.fetch_page(1)
+
+    def _run(self) -> list[dict]:
+        first = self._fetch_first()
         self.business = extract_business(first)
         pages = total_pages(first)
         if self.options.max_pages:
@@ -309,6 +374,7 @@ class TrustpilotScraper:
                 "page": page,
                 "pages": pages,
                 "count": len(reviews),
+                "engine": self.engine_used,
                 "business": self.business,
             }
         )

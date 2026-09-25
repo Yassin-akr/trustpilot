@@ -44,15 +44,30 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--lang", default="", help="Langue des avis : all, fr, en... (défaut : celle du site)")
     p.add_argument("--max-pages", type=int, help="Nombre maximum de pages à parcourir")
     p.add_argument("--delay", type=float, default=1.5, help="Pause entre deux pages, en secondes (défaut 1.5)")
+    p.add_argument(
+        "--engine",
+        choices=["auto", "http", "browser"],
+        default="auto",
+        help="auto (défaut) : HTTP, puis vrai navigateur si Trustpilot bloque ; http ; browser",
+    )
+    p.add_argument("--show-browser", action="store_true", help="Afficher la fenêtre du navigateur")
     a = p.parse_args(argv)
 
     def progress(info: dict):
-        print(f"Page {info['page']}/{info['pages']} : {info['count']} avis uniques", file=sys.stderr)
+        mode = " (navigateur)" if info.get("engine") == "browser" else ""
+        print(f"Page {info['page']}/{info['pages']} : {info['count']} avis uniques{mode}", file=sys.stderr)
 
     try:
         scraper = TrustpilotScraper(
             a.brand,
-            ScrapeOptions(stars=a.stars or [], languages=a.lang, max_pages=a.max_pages, delay=a.delay),
+            ScrapeOptions(
+                stars=a.stars or [],
+                languages=a.lang,
+                max_pages=a.max_pages,
+                delay=a.delay,
+                engine=a.engine,
+                show_browser=a.show_browser,
+            ),
             on_progress=progress,
         )
         reviews = scraper.run()

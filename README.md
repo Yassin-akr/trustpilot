@@ -69,14 +69,27 @@ reviews = scraper.run()
 print(scraper.business["trust_score"], len(reviews))
 ```
 
-## En cas d'erreur « HTTP 403 »
+## Modes de récupération et erreur « HTTP 403 »
 
-Trustpilot bloque les requêtes qu'il identifie comme venant d'un robot. Pour limiter ce risque :
+Trustpilot est protégé par un pare-feu anti-robots (CloudFront) qui peut refuser les requêtes HTTP simples.
+Trois modes sont disponibles (`--engine` en ligne de commande, « Mode » dans l'interface) :
 
-- `curl_cffi` (installé via `requirements.txt`) se présente comme un vrai navigateur Chrome.
-  Vérifie qu'il est bien installé avec `python -c "import curl_cffi"`.
-- Si le blocage persiste, ton adresse IP est probablement bloquée pour un temps. Attends quelques
-  minutes, augmente `--delay`, ou change de connexion (partage 4G, VPN).
+| mode | fonctionnement |
+|---|---|
+| `auto` (défaut) | essaie d'abord en HTTP (rapide) ; si Trustpilot répond 403, bascule sur un vrai navigateur |
+| `http` | requêtes HTTP uniquement (`curl_cffi`, qui imite Chrome) |
+| `browser` | charge chaque page dans un vrai Chrome ou Edge piloté par Playwright |
+
+Le mode navigateur utilise Chrome ou Edge s'ils sont installés (Edge est toujours présent sur Windows) :
+aucun téléchargement n'est nécessaire. Sinon, installe Chromium avec `python -m playwright install chromium`.
+Ajoute `--show-browser` pour voir la fenêtre (utile si une vérification manuelle apparaît).
+
+```bash
+python -m trustpilot_scraper getstryde.co --engine browser --max-pages 2
+```
+
+Si même le mode navigateur est bloqué, ton adresse IP est probablement bloquée pour un temps :
+attends, augmente `--delay`, ou change de connexion (partage 4G, VPN).
 
 ## Bon à savoir
 

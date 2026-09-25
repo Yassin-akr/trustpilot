@@ -50,6 +50,14 @@
         <label>Pages max
           <input type="number" name="max_pages" min="1" placeholder="toutes">
         </label>
+        <label>Mode
+          <select name="engine">
+            <option value="auto">Auto (recommandé)</option>
+            <option value="http">Rapide (HTTP)</option>
+            <option value="browser">Navigateur (Chrome/Edge)</option>
+          </select>
+        </label>
+        <label class="inline"><input type="checkbox" name="show_browser"> Afficher le navigateur</label>
         <label>Pause entre pages (s)
           <input type="number" name="delay" min="0.5" max="10" step="0.5" value="1.5">
         </label>
