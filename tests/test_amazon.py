@@ -271,3 +271,19 @@ def test_web_amazon_job(monkeypatch):
     r = client.get(f"/api/jobs/{job['id']}/export/csv")
     assert "amazon_B0C1234567_reviews.csv" in r.headers["content-disposition"]
     assert r.content.decode("utf-8-sig").startswith(",".join(AMAZON_FIELDS))
+
+
+def test_cumulative_pages_only_new_reviews_counted():
+    """Avec « Show more reviews », chaque page contient aussi les avis déjà lus."""
+
+    class Cumulative(FakeAmazon):
+        def get(self, url, timeout=None):
+            self.calls.append(url)
+            page = int(parse_qs(urlparse(url).query)["pageNumber"][0])
+            chunk = self.reviews[: page * 10]
+            return BrowserResponse(200, reviews_page([review_html(i, r, d) for i, r, d in chunk]), url)
+
+    progress = []
+    reviews = scraper(Cumulative([5] * 29), on_progress=progress.append).run()
+    assert len(reviews) == 29
+    assert [p["count"] for p in progress] == [10, 20, 29]

@@ -51,6 +51,22 @@ STAR_FILTERS = {1: "one_star", 2: "two_star", 3: "three_star", 4: "four_star", 5
 MAX_PAGES = 10  # limite imposée par Amazon pour une recherche
 PAGE_SIZE = 10
 
+# Boutons pour afficher les avis suivants : « Show more reviews » (nouvelle page, avis ajoutés
+# à la liste) ou lien « Page suivante » (ancienne page). Les URL ?pageNumber=N sont parfois ignorées.
+MORE_SELECTORS = [
+    '[data-hook="show-more-button"]',
+    '[data-hook="see-more-reviews"]',
+    "#cm_cr-pagination_bar li.a-last:not(.a-disabled) a",
+    "li.a-last:not(.a-disabled) a",
+    ":is(a, button, input, span.a-button-text, span.a-button-inner)"
+    ":text-matches('(show|see|afficher|voir|mehr|weitere|más|mostra|altre).{0,20}"
+    "(reviews|avis|rezensionen|reseñas|opiniones|recensioni|beoordelingen)', 'i')",
+]
+REVIEW_COUNT_JS = """([n, first]) => {
+  const r = document.querySelectorAll('[data-hook="review"]');
+  return r.length > n || (r.length > 0 && r[0].id !== first);
+}"""
+
 ASIN_RE = re.compile(r"^[A-Z0-9]{10}$")
 ASIN_IN_URL_RE = re.compile(r"/(?:dp|gp/product|product-reviews|gp/aw/d|ASIN)/([A-Z0-9]{10})", re.I)
 
@@ -393,15 +409,18 @@ class AmazonScraper:
         for page in range(1, self.max_pages + 1):
             if page > 1 or self.collected:
                 self._sleep(self.delay)
-            html = self.fetch(self.page_url(page, star, sort))
+            html = self._load_more() if page > 1 else None
+            if html is None:
+                html = self.fetch(self.page_url(page, star, sort))
             if not self.business:
                 self.business = extract_product(html, self.asin, self.domain)
-            items = extract_reviews(html, self.domain)
-            ids = {r["id"] for r in items}
-            if not ids or ids <= seen:
+            # Avec « Show more reviews », la page contient aussi les avis déjà lus : on ne
+            # garde que les nouveaux.
+            new = [r for r in extract_reviews(html, self.domain) if r["id"] not in seen]
+            if not new:
                 return False  # plus d'avis dans cette recherche
-            seen |= ids
-            for r in items:
+            seen |= {r["id"] for r in new}
+            for r in new:
                 self.collected[r["id"] or f"_{len(self.collected)}"] = r
             self.on_progress(
                 {
@@ -413,9 +432,43 @@ class AmazonScraper:
                     "business": self.business,
                 }
             )
-            if len(items) < PAGE_SIZE:
+            if len(new) < PAGE_SIZE:
                 return False  # dernière page
         return True
+
+    def _load_more(self) -> str | None:
+        """Clique sur « avis suivants » dans la page déjà ouverte. None si impossible
+        (pas de navigateur, pas de bouton) : on passe alors par l'URL ?pageNumber=N."""
+        page = getattr(self.session, "page", None)
+        if page is None:
+            return None
+        if self.cancel_event.is_set():
+            raise Cancelled()
+        for selector in MORE_SELECTORS:
+            try:
+                button = page.locator(selector).first
+                if not button.count() or not button.is_visible():
+                    continue
+                state = page.evaluate(
+                    """() => { const r = document.querySelectorAll('[data-hook="review"]');
+                               return [r.length, r.length ? r[0].id : ""]; }"""
+                )
+                button.scroll_into_view_if_needed(timeout=5000)
+                button.click(timeout=10000)
+            except Exception:  # noqa: BLE001 - bouton non cliquable : on essaie le suivant
+                continue
+            ms = self.timeout * 1000
+            try:
+                page.wait_for_function(REVIEW_COUNT_JS, arg=state, timeout=ms)
+            except Exception:  # noqa: BLE001 - lien classique : la page a changé d'URL
+                try:
+                    page.wait_for_selector('[data-hook="review"]', timeout=ms)
+                except Exception:  # noqa: BLE001
+                    return None
+            page.wait_for_timeout(500)  # laisse la liste finir de s'afficher
+            html = page.content()
+            return html if page_kind(html, page.url) == "reviews" else None
+        return None
 
 
 def amazon_login(domain: str = "amazon.fr", timeout: float = 600, on_status=None) -> bool:
