@@ -3,23 +3,38 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Avis Trustpilot</title>
+<title>Extracteur d'avis</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <header class="top">
   <div class="wrap">
-    <h1><span class="logo">★</span> Extracteur d'avis Trustpilot</h1>
-    <p class="muted">Indique une marque, récupère tous ses avis, exporte-les en CSV, Excel ou JSON.</p>
+    <h1><span class="logo">★</span> Extracteur d'avis</h1>
+    <p class="muted">Récupère tous les avis Trustpilot d'une marque ou Amazon d'un produit, exporte-les en CSV, Excel ou JSON.</p>
   </div>
 </header>
 
 <main class="wrap">
   <form id="form" class="card">
+    <div class="tabs" role="radiogroup" aria-label="Source des avis">
+      <label><input type="radio" name="source" value="trustpilot" checked> Trustpilot</label>
+      <label><input type="radio" name="source" value="amazon"> Amazon</label>
+    </div>
     <div class="row main-row">
       <input id="brand" name="brand" required autocomplete="off"
              placeholder="Domaine ou URL Trustpilot (ex : getstryde.co)">
       <button type="submit" id="go" class="primary">Récupérer les avis</button>
+    </div>
+    <div class="row amazon-only amazon-bar" hidden>
+      <label class="inline-select">Site
+        <select name="amazon_domain" id="amazon-domain">
+          <option>amazon.fr</option><option>amazon.com</option><option>amazon.co.uk</option>
+          <option>amazon.de</option><option>amazon.es</option><option>amazon.it</option>
+          <option>amazon.nl</option><option>amazon.be</option><option>amazon.ca</option>
+        </select>
+      </label>
+      <button type="button" id="amazon-login" class="ghost">Se connecter à Amazon</button>
+      <span id="amazon-login-status" class="muted">Connexion requise une fois : elle est ensuite mémorisée.</span>
     </div>
     <details>
       <summary>Options</summary>
@@ -35,7 +50,7 @@
           </div>
           <small class="muted">Rien de coché = toutes les notes</small>
         </fieldset>
-        <label>Langue
+        <label class="tp-only">Langue
           <select name="languages">
             <option value="">Par défaut</option>
             <option value="all">Toutes</option>
@@ -50,7 +65,7 @@
         <label>Pages max
           <input type="number" name="max_pages" min="1" placeholder="toutes">
         </label>
-        <label>Mode
+        <label class="tp-only">Mode
           <select name="engine">
             <option value="auto">Auto (recommandé)</option>
             <option value="http">Rapide (HTTP)</option>
@@ -59,7 +74,7 @@
         </label>
         <label class="inline"><input type="checkbox" name="show_browser"> Afficher le navigateur</label>
         <label>Pause entre pages (s)
-          <input type="number" name="delay" min="0.5" max="10" step="0.5" value="1.5">
+          <input type="number" name="delay" id="delay" min="0.5" max="10" step="0.5" value="1.5">
         </label>
       </div>
     </details>
@@ -74,7 +89,7 @@
       </div>
       <div class="score" id="biz-score" hidden>
         <span class="big" id="biz-trust"></span>
-        <span class="muted">TrustScore · <span id="biz-total"></span> avis</span>
+        <span class="muted"><span id="biz-score-label">TrustScore</span> · <span id="biz-total"></span> avis</span>
       </div>
     </div>
 
@@ -93,8 +108,8 @@
       <div class="stats">
         <div class="stat"><span class="big" id="st-count">0</span><span class="muted">avis récupérés</span></div>
         <div class="stat"><span class="big" id="st-avg">–</span><span class="muted">note moyenne</span></div>
-        <div class="stat"><span class="big" id="st-replied">0</span><span class="muted">avec réponse</span></div>
-        <div class="stat"><span class="big" id="st-verified">0</span><span class="muted">vérifiés</span></div>
+        <div class="stat" id="st-replied-box"><span class="big" id="st-replied">0</span><span class="muted">avec réponse</span></div>
+        <div class="stat"><span class="big" id="st-verified">0</span><span class="muted" id="st-verified-label">vérifiés</span></div>
         <div class="dist" id="dist"></div>
       </div>
 

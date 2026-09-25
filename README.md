@@ -1,7 +1,7 @@
-# Extracteur d'avis Trustpilot
+# Extracteur d'avis Trustpilot & Amazon
 
-Récupère **tous** les avis Trustpilot d'une marque et les exporte en **CSV, Excel ou JSON**,
-via une interface web ou en ligne de commande.
+Récupère **tous** les avis Trustpilot d'une marque, ou Amazon d'un produit, et les exporte en
+**CSV, Excel ou JSON**, via une interface web ou en ligne de commande.
 
 Les avis sont lus dans le JSON `__NEXT_DATA__` embarqué dans chaque page Trustpilot,
 puis dédupliqués par identifiant (pas de doublons liés à la pagination).
@@ -45,7 +45,41 @@ python -m trustpilot_scraper getstryde.co --stars 1 2             # seulement le
 python -m trustpilot_scraper getstryde.co --max-pages 5 --delay 2
 ```
 
-## Colonnes exportées
+## Amazon
+
+Amazon réserve la liste complète des avis aux utilisateurs **connectés** : l'outil pilote un vrai
+navigateur (Chrome ou Edge) avec un profil dédié, dans lequel tu te connectes **une seule fois**.
+
+> ⚠️ La récupération automatique d'avis est contraire aux conditions d'utilisation d'Amazon, qui peut
+> afficher des captchas ou restreindre le compte utilisé. Utilise de préférence un **compte secondaire**.
+
+```bash
+# 1. Connexion (une fois) : une fenêtre s'ouvre, connecte-toi (coche « Rester connecté »)
+python -m trustpilot_scraper amazon-login                     # --domain amazon.com, amazon.de...
+
+# 2. Extraction : lien de la fiche produit ou ASIN
+python -m trustpilot_scraper amazon https://www.amazon.fr/dp/B0C1234567 -o avis.xlsx
+python -m trustpilot_scraper amazon B0C1234567 --stars 1 2    # seulement les avis négatifs
+python -m trustpilot_scraper amazon B0C1234567 --show-browser # voir la fenêtre (captcha)
+```
+
+Dans l'interface web : onglet **Amazon**, bouton **Se connecter à Amazon**, puis colle le lien du produit.
+
+- Pendant l'extraction, une fenêtre de navigateur s'ouvre **hors de l'écran** (Amazon bloque plus
+  facilement les navigateurs invisibles). Ne la ferme pas.
+- Amazon n'affiche que 10 pages (100 avis) par recherche : l'outil parcourt alors les avis **note par
+  note**, et pour les notes très fournies trie aussi par « utiles » (jusqu'à ~200 avis par note,
+  soit ~1 000 par produit). Au-delà, un avertissement le signale.
+- En cas de **captcha**, relance avec `--show-browser` (ou coche « Afficher le navigateur ») et résous-le
+  dans la fenêtre : l'extraction reprend toute seule.
+- La connexion est stockée dans `~/.trustpilot_scraper/amazon-profile` (cookies inclus) :
+  ne partage pas ce dossier. Supprime-le pour te déconnecter.
+- L'image Docker ne gère pas Amazon (il faut une fenêtre de navigateur).
+
+Colonnes Amazon : `id`, `date`, `rating`, `title`, `text`, `name`, `country`, `verified` (achat vérifié),
+`likes` (votes « utile »), `variant` (taille, couleur…), `date_text` (date telle qu'affichée), `url`.
+
+## Colonnes exportées (Trustpilot)
 
 | colonne | contenu |
 |---|---|

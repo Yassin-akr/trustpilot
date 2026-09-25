@@ -21,11 +21,63 @@ function starsHtml(n) {
   return `<span class="stars" style="color:${STAR_COLORS[n] || "var(--muted)"}">${"★".repeat(n)}${"☆".repeat(5 - n)}</span>`;
 }
 
+// ---------- Source : Trustpilot / Amazon ----------
+const PLACEHOLDERS = {
+  trustpilot: "Domaine ou URL Trustpilot (ex : getstryde.co)",
+  amazon: "Lien de la fiche produit Amazon ou ASIN (ex : B0C1234567)",
+};
+const source = () => document.querySelector('input[name="source"]:checked').value;
+
+function applySource() {
+  const s = source();
+  const amazon = s === "amazon";
+  $("#brand").placeholder = PLACEHOLDERS[s];
+  document.querySelectorAll(".amazon-only").forEach((el) => (el.hidden = !amazon));
+  document.querySelectorAll(".tp-only").forEach((el) => (el.hidden = amazon));
+  $("#delay").value = amazon ? 2 : 1.5;
+  try { localStorage.setItem("source", s); } catch {}
+}
+document.querySelectorAll('input[name="source"]').forEach((el) => el.addEventListener("change", applySource));
+try {
+  const saved = localStorage.getItem("source");
+  if (saved) document.querySelector(`input[name="source"][value="${saved}"]`).checked = true;
+} catch {}
+applySource();
+
+// ---------- Connexion Amazon ----------
+let loginTimer = null;
+$("#amazon-login").addEventListener("click", async () => {
+  $("#amazon-login").disabled = true;
+  const r = await fetch("/api/amazon/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ domain: $("#amazon-domain").value }),
+  });
+  const data = await r.json();
+  if (!r.ok) {
+    $("#amazon-login-status").textContent = data.detail || "Erreur";
+    $("#amazon-login").disabled = false;
+    return;
+  }
+  pollLogin();
+});
+
+async function pollLogin() {
+  clearTimeout(loginTimer);
+  const st = await (await fetch("/api/amazon/login")).json();
+  const icons = { done: "✅ ", error: "❌ ", waiting: "⏳ " };
+  $("#amazon-login-status").textContent = (icons[st.status] || "") + (st.message || "");
+  if (st.status === "waiting") loginTimer = setTimeout(pollLogin, 1500);
+  else $("#amazon-login").disabled = false;
+}
+
 // ---------- Lancement ----------
 $("#form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const fd = new FormData(e.target);
   const body = {
+    source: source(),
+    amazon_domain: fd.get("amazon_domain"),
     brand: fd.get("brand").trim(),
     stars: fd.getAll("stars").map(Number),
     languages: fd.get("languages"),
@@ -101,12 +153,13 @@ async function poll() {
 function renderJob(job) {
   const b = job.business || {};
   $("#biz-name").textContent = b.name || job.domain;
-  const url = job.url || `https://www.trustpilot.com/review/${job.domain}`;
+  const url = b.website && job.source === "amazon" ? b.website : job.url || `https://www.trustpilot.com/review/${job.domain}`;
   $("#biz-link").textContent = url.replace("https://", "");
   $("#biz-link").href = url;
   if (b.trust_score != null) {
     $("#biz-score").hidden = false;
     $("#biz-trust").textContent = b.trust_score;
+    $("#biz-score-label").textContent = b.score_label || "TrustScore";
     $("#biz-total").textContent = (b.total_reviews ?? "?").toLocaleString("fr-FR");
   }
 
@@ -117,7 +170,9 @@ function renderJob(job) {
     queued: "En attente…",
     running: p.pages
       ? `${p.label ? `Avis ${p.label} · ` : ""}Page ${p.page} / ${p.pages} — ${p.count} avis${p.engine === "browser" ? " (navigateur)" : ""}`
-      : "Connexion à Trustpilot…",
+      : job.source === "amazon"
+        ? "Ouverture du navigateur et connexion à Amazon…"
+        : "Connexion à Trustpilot…",
   };
   $("#progress-text").textContent = labels[job.status] || "";
   $("#progress-box").hidden = !(job.status in labels);
@@ -137,6 +192,9 @@ async function loadReviews(id) {
   const job = await r.json();
   if (id !== currentJob) return;
   reviews = job.reviews || [];
+  const amazon = job.source === "amazon";
+  $("#st-replied-box").hidden = amazon;
+  $("#st-verified-label").textContent = amazon ? "achats vérifiés" : "vérifiés";
   const s = job.summary || { count: 0, distribution: {} };
   $("#st-count").textContent = s.count.toLocaleString("fr-FR");
   $("#st-avg").textContent = s.average ?? "–";
@@ -193,11 +251,13 @@ function renderList() {
       <div class="review-head">
         <span>${starsHtml(r.rating)} <strong>${esc(r.name)}</strong>
           <span class="muted">${esc(r.country)}</span>
-          ${r.verified ? '<span class="badge">vérifié</span>' : ""}</span>
-        <a class="muted" href="${esc(r.url)}" target="_blank" rel="noopener">${fmtDate(r.date)}</a>
+          ${r.verified ? `<span class="badge">${r.variant !== undefined ? "achat vérifié" : "vérifié"}</span>` : ""}</span>
+        <a class="muted" href="${esc(r.url)}" target="_blank" rel="noopener">${fmtDate(r.date) || esc(r.date_text)}</a>
       </div>
+      ${r.variant ? `<div class="muted small">${esc(r.variant)}</div>` : ""}
       <h4>${highlight(r.title, q)}</h4>
       <p>${highlight(r.text, q)}</p>
+      ${r.variant !== undefined && r.likes ? `<div class="muted small">👍 ${r.likes} personne(s) ont trouvé cet avis utile</div>` : ""}
       ${r.reply ? `<div class="reply"><strong>Réponse de l'entreprise</strong> <span class="muted">${fmtDate(r.reply_date)}</span><br>${highlight(r.reply, q)}</div>` : ""}
     </article>`
     )
@@ -224,7 +284,8 @@ async function loadHistory() {
   const label = { done: "terminé", cancelled: "arrêté", error: "erreur", running: "en cours", queued: "en attente" };
   $("#history").innerHTML = jobs
     .map(
-      (j) => `<li><a href="#${j.id}">${esc(j.business?.name || j.domain)}</a>
+      (j) => `<li><span><span class="badge">${j.source === "amazon" ? "Amazon" : "Trustpilot"}</span>
+      <a href="#${j.id}">${esc(j.business?.name || j.domain)}</a></span>
       <span class="muted">${j.summary ? j.summary.count + " avis · " : ""}${label[j.status] || j.status}</span></li>`
     )
     .join("");

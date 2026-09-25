@@ -211,6 +211,8 @@ ProgressCallback = Callable[[dict], None]
 
 
 class TrustpilotScraper:
+    FIELDS = FIELDS
+
     def __init__(
         self,
         brand: str,
@@ -268,6 +270,11 @@ class TrustpilotScraper:
     @property
     def base_url(self) -> str:
         return f"https://{self.host}/review/{self.domain}"
+
+    @property
+    def slug(self) -> str:
+        """Base du nom des fichiers exportés."""
+        return self.domain.replace(".", "_")
 
     def page_url(self, page: int, stars: list[int] | None = None) -> str:
         q = urlencode(self.options.query(page, stars), doseq=True)
