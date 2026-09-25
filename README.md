@@ -40,6 +40,7 @@ docker run -p 8000:8000 trustpilot-scraper
 python -m trustpilot_scraper getstryde.co                         # -> getstryde_co_reviews.csv
 python -m trustpilot_scraper getstryde.co -o avis.xlsx            # Excel
 python -m trustpilot_scraper getstryde.co -o avis.json --lang fr  # avis en français, JSON
+python -m trustpilot_scraper getstryde.co --lang all              # avis de toutes les langues
 python -m trustpilot_scraper getstryde.co --stars 1 2             # seulement les avis négatifs
 python -m trustpilot_scraper getstryde.co --max-pages 5 --delay 2
 ```
@@ -67,6 +68,15 @@ scraper = TrustpilotScraper("getstryde.co", ScrapeOptions(stars=[1, 2]))
 reviews = scraper.run()
 print(scraper.business["trust_score"], len(reviews))
 ```
+
+## En cas d'erreur « HTTP 403 »
+
+Trustpilot bloque les requêtes qu'il identifie comme venant d'un robot. Pour limiter ce risque :
+
+- `curl_cffi` (installé via `requirements.txt`) se présente comme un vrai navigateur Chrome.
+  Vérifie qu'il est bien installé avec `python -c "import curl_cffi"`.
+- Si le blocage persiste, ton adresse IP est probablement bloquée pour un temps. Attends quelques
+  minutes, augmente `--delay`, ou change de connexion (partage 4G, VPN).
 
 ## Bon à savoir
 

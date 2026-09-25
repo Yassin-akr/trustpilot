@@ -25,7 +25,7 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 class JobRequest(BaseModel):
     brand: str = Field(..., min_length=3)
     stars: list[int] = Field(default_factory=list)
-    languages: str = "all"
+    languages: str = ""
     max_pages: int | None = Field(default=None, ge=1)
     delay: float = Field(default=1.5, ge=0.5, le=10)
 

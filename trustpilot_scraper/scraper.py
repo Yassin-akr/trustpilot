@@ -13,18 +13,40 @@ import threading
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Iterable
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 import requests
+
+try:  # curl_cffi reproduit l'empreinte TLS d'un vrai Chrome : beaucoup moins de 403
+    from curl_cffi import requests as curl_requests
+except ImportError:  # pragma: no cover - dépend de l'installation
+    curl_requests = None
 
 HEADERS = {
     # Un vrai User-Agent est indispensable, sinon Trustpilot bloque.
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     ),
-    "Accept-Language": "en-GB,en;q=0.9,fr;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-GB,en;q=0.9",
 }
+
+NETWORK_ERRORS: tuple[type[Exception], ...] = (requests.RequestException, OSError)
+if curl_requests is not None:
+    NETWORK_ERRORS += (curl_requests.RequestsError,)
+
+
+def make_session():
+    """Session HTTP : curl_cffi (imite Chrome) si disponible, sinon requests."""
+    if curl_requests is not None:
+        # Pas de User-Agent forcé : curl_cffi envoie celui qui correspond à son empreinte.
+        return curl_requests.Session(
+            impersonate="chrome", headers={"Accept-Language": HEADERS["Accept-Language"]}
+        )
+    session = requests.Session()
+    session.headers.update(HEADERS)
+    return session
 
 NEXT_DATA_RE = re.compile(
     r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', re.DOTALL
@@ -161,7 +183,7 @@ def total_pages(data: dict) -> int:
 @dataclass
 class ScrapeOptions:
     stars: list[int] = field(default_factory=list)  # vide = toutes les notes
-    languages: str = "all"  # "all" ou code langue ("fr", "en"...)
+    languages: str = ""  # "" = comportement par défaut du site, "all" ou code langue ("fr"...)
     max_pages: int | None = None  # None = toutes
     delay: float = 1.5  # secondes entre deux pages (politesse)
     retries: int = 3
@@ -186,14 +208,13 @@ class TrustpilotScraper:
         self,
         brand: str,
         options: ScrapeOptions | None = None,
-        session: requests.Session | None = None,
+        session=None,
         on_progress: ProgressCallback | None = None,
         cancel_event: threading.Event | None = None,
     ):
         self.domain, self.host = normalize_domain(brand)
         self.options = options or ScrapeOptions()
-        self.session = session or requests.Session()
-        self.session.headers.update(HEADERS)
+        self.session = session or make_session()
         self.on_progress = on_progress or (lambda _: None)
         self.cancel_event = cancel_event or threading.Event()
         self.business: dict = {}
@@ -203,6 +224,10 @@ class TrustpilotScraper:
     @property
     def base_url(self) -> str:
         return f"https://{self.host}/review/{self.domain}"
+
+    def page_url(self, page: int) -> str:
+        q = urlencode(self.options.query(page), doseq=True)
+        return f"{self.base_url}?{q}" if q else self.base_url
 
     def _check_cancel(self):
         if self.cancel_event.is_set():
@@ -219,9 +244,7 @@ class TrustpilotScraper:
         for attempt in range(1, self.options.retries + 1):
             self._check_cancel()
             try:
-                r = self.session.get(
-                    self.base_url, params=self.options.query(page), timeout=self.options.timeout
-                )
+                r = self.session.get(self.page_url(page), timeout=self.options.timeout)
                 if r.status_code == 404:
                     if page == 1:
                         raise NotFound(f"Marque introuvable sur Trustpilot : {self.domain}")
@@ -232,11 +255,18 @@ class TrustpilotScraper:
                 return parse_next_data(r.text)
             except NotFound:
                 raise
-            except (requests.RequestException, ScraperError, json.JSONDecodeError) as e:
+            except (*NETWORK_ERRORS, ScraperError, json.JSONDecodeError) as e:
                 last_err = e
                 if attempt < self.options.retries:
                     self._sleep(min(2**attempt * 2, 30))  # 4s, 8s, 16s...
-        raise ScraperError(f"Page {page} : échec après {self.options.retries} essais ({last_err})")
+        msg = f"Page {page} : échec après {self.options.retries} essais ({last_err})"
+        if "HTTP 403" in str(last_err):
+            msg += (
+                ". Trustpilot bloque la requête (protection anti-robots)."
+                + ("" if curl_requests else " Installe curl_cffi : pip install curl_cffi.")
+                + " Attends quelques minutes ou change de connexion (4G, VPN) puis réessaie."
+            )
+        raise ScraperError(msg)
 
     def run(self) -> list[dict]:
         """Récupère tous les avis, triés du plus récent au plus ancien."""

@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("brand", help="Domaine (getstryde.co) ou URL Trustpilot de la marque")
     p.add_argument("-o", "--output", help="Fichier de sortie (.csv, .json, .xlsx). Défaut : <domaine>_reviews.csv")
     p.add_argument("--stars", type=int, nargs="+", choices=range(1, 6), help="Ne garder que ces notes")
-    p.add_argument("--lang", default="all", help="Langue des avis : all (défaut), fr, en...")
+    p.add_argument("--lang", default="", help="Langue des avis : all, fr, en... (défaut : celle du site)")
     p.add_argument("--max-pages", type=int, help="Nombre maximum de pages à parcourir")
     p.add_argument("--delay", type=float, default=1.5, help="Pause entre deux pages, en secondes (défaut 1.5)")
     a = p.parse_args(argv)

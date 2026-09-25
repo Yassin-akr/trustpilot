@@ -68,9 +68,12 @@ class FakeSession:
         self.headers = {}
         self.calls = []
 
-    def get(self, url, params=None, timeout=None):
-        self.calls.append((url, dict(params or {})))
-        page = (params or {}).get("page", 1)
+    def get(self, url, timeout=None):
+        from urllib.parse import parse_qs, urlparse
+
+        params = {k: v if k == "stars" else v[0] for k, v in parse_qs(urlparse(url).query).items()}
+        self.calls.append((url, params))
+        page = int(params.get("page", 1))
         resp = self.pages.get(page, (404, ""))
         if isinstance(resp, list):  # réponses successives (pour tester les retries)
             resp = resp.pop(0)
@@ -128,7 +131,23 @@ def test_query_params_filters():
     TrustpilotScraper("getstryde.co", fast_opts(stars=[5, 1], languages="fr", max_pages=2), session=session).run()
     assert len(session.calls) == 2
     assert session.calls[0][1] == {"languages": "fr", "stars": ["1", "5"]}
-    assert session.calls[1][1]["page"] == 2
+    assert session.calls[1][1]["page"] == "2"
+
+
+def test_default_request_matches_original_script():
+    session = FakeSession(PAGES)
+    TrustpilotScraper("getstryde.co", fast_opts(max_pages=2), session=session).run()
+    assert [u for u, _ in session.calls] == [
+        "https://www.trustpilot.com/review/getstryde.co",
+        "https://www.trustpilot.com/review/getstryde.co?page=2",
+    ]
+
+
+def test_403_explained(monkeypatch):
+    s = TrustpilotScraper("getstryde.co", fast_opts(), session=FakeSession({1: (403, "")}))
+    monkeypatch.setattr(s, "_sleep", lambda _: None)
+    with pytest.raises(ScraperError, match="anti-robots"):
+        s.run()
 
 
 def test_brand_not_found():
