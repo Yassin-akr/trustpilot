@@ -10,6 +10,7 @@ from trustpilot_scraper.amazon import (
     LoginRequired,
     extract_product,
     extract_reviews,
+    is_logged_in,
     page_kind,
     parse_country,
     parse_date,
@@ -125,6 +126,27 @@ def test_page_kind():
     assert page_kind("<html></html>", "https://www.amazon.fr/ap/signin?x") == "login"
     assert page_kind(CAPTCHA_PAGE) == "captcha"
     assert page_kind(reviews_page([])) == "reviews"
+
+
+@pytest.mark.parametrize(
+    "url,cookies,expected",
+    [
+        # cookies d'un visiteur non connecté : pas de cookie at-*
+        ("https://www.amazon.co.uk/gp/css/order-history",
+         [{"name": "session-id", "domain": ".amazon.co.uk"}, {"name": "i18n-prefs", "domain": ".amazon.co.uk"}],
+         False),
+        ("https://www.amazon.co.uk/gp/css/order-history",
+         [{"name": "at-acbuk", "domain": ".amazon.co.uk"}], True),
+        # connecté, mais encore sur une page de connexion / double authentification
+        ("https://www.amazon.co.uk/ap/mfa?x", [{"name": "at-acbuk", "domain": ".amazon.co.uk"}], False),
+        # connecté sur amazon.fr seulement
+        ("https://www.amazon.co.uk/", [{"name": "at-acbfr", "domain": ".amazon.fr"}], False),
+        ("https://www.amazon.com/", [{"name": "at-main", "domain": ".amazon.com"}], True),
+    ],
+)
+def test_is_logged_in(url, cookies, expected):
+    domain = urlparse(url).netloc.replace("www.", "")
+    assert is_logged_in(url, cookies, domain) is expected
 
 
 # ---------- extraction complète ----------

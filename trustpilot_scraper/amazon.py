@@ -81,6 +81,21 @@ COUNTRY_RE = re.compile(
 )
 
 
+# Cookie posé par Amazon une fois connecté : at-main (.com), at-acbuk (.co.uk), at-acbfr (.fr)...
+AUTH_COOKIE_RE = re.compile(r"^at-(main|acb[a-z]+)$")
+
+
+def is_logged_in(url: str, cookies: list[dict], domain: str) -> bool:
+    """Connecté = cookie d'authentification présent pour ce site, et plus sur une page /ap/
+    (connexion, double authentification...)."""
+    if "/ap/" in url:
+        return False
+    return any(
+        AUTH_COOKIE_RE.match(c.get("name", "")) and c.get("domain", "").lstrip(".").endswith(domain)
+        for c in cookies
+    )
+
+
 class LoginRequired(ScraperError):
     pass
 
@@ -317,10 +332,17 @@ class AmazonScraper:
                 raise ScraperError(f"Produit introuvable sur {self.domain} : {self.asin}")
             kind = page_kind(r.text, getattr(r, "url", ""))
             if kind == "login":
+                if self.show_browser and hasattr(self.session, "wait_until"):
+                    self.warnings.append("Connexion Amazon demandée : connecte-toi dans la fenêtre.")
+                    if self.session.wait_until(
+                        lambda p: is_logged_in(p.url, p.context.cookies(), self.domain), timeout=600
+                    ):
+                        continue
                 raise LoginRequired(
                     f"Connexion à Amazon requise. Lance d'abord : python -m trustpilot_scraper "
                     f"amazon-login --domain {self.domain} (ou le bouton « Se connecter à Amazon » "
-                    "de l'interface)."
+                    "de l'interface). Tu peux aussi relancer avec --show-browser et te connecter "
+                    "directement dans la fenêtre."
                 )
             if kind == "captcha":
                 if self.show_browser and hasattr(self.session, "wait_until"):
@@ -417,13 +439,12 @@ def amazon_login(domain: str = "amazon.fr", timeout: float = 600, on_status=None
     except RuntimeError as e:
         raise ScraperError(str(e))
     try:
-        session.get(f"https://www.{domain}/gp/css/homepage.html", timeout=60)
+        # L'historique des commandes exige d'être connecté : sinon, Amazon redirige
+        # vers sa page de connexion (la page « Votre compte », elle, s'affiche sans).
+        session.get(f"https://www.{domain}/gp/css/order-history", timeout=60)
 
         def logged_in(page) -> bool:
-            # Pages /ap/ = connexion, double authentification, etc.
-            return domain in page.url and "/ap/" not in page.url and page_kind(
-                page.content(), page.url
-            ) != "login"
+            return is_logged_in(page.url, page.context.cookies(), domain)
 
         if logged_in(session.page):
             status("Déjà connecté à Amazon.")
