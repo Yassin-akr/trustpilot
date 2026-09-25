@@ -79,7 +79,7 @@ class Job:
                 self.warnings = self.scraper.warnings
 
     def _on_progress(self, info: dict):
-        self.progress = {k: info.get(k) for k in ("page", "pages", "count", "engine")}
+        self.progress = {k: info.get(k) for k in ("page", "pages", "count", "engine", "label")}
         self.business = info.get("business") or self.business
 
     @property

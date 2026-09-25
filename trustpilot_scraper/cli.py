@@ -55,7 +55,11 @@ def main(argv: list[str] | None = None) -> int:
 
     def progress(info: dict):
         mode = " (navigateur)" if info.get("engine") == "browser" else ""
-        print(f"Page {info['page']}/{info['pages']} : {info['count']} avis uniques{mode}", file=sys.stderr)
+        label = f"[{info['label']}] " if info.get("label") else ""
+        print(
+            f"{label}Page {info['page']}/{info['pages']} : {info['count']} avis uniques{mode}",
+            file=sys.stderr,
+        )
 
     try:
         scraper = TrustpilotScraper(

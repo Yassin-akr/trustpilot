@@ -116,7 +116,7 @@ function renderJob(job) {
   const labels = {
     queued: "En attente…",
     running: p.pages
-      ? `Page ${p.page} / ${p.pages} — ${p.count} avis${p.engine === "browser" ? " (navigateur)" : ""}`
+      ? `${p.label ? `Avis ${p.label} · ` : ""}Page ${p.page} / ${p.pages} — ${p.count} avis${p.engine === "browser" ? " (navigateur)" : ""}`
       : "Connexion à Trustpilot…",
   };
   $("#progress-text").textContent = labels[job.status] || "";

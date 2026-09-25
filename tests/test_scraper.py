@@ -252,3 +252,54 @@ def test_web_api(monkeypatch):
     assert r.status_code == 200
     assert "getstryde_co_reviews.csv" in r.headers["content-disposition"]
     assert client.get(f"/api/jobs/{job['id']}/export/pdf").status_code == 400
+
+
+class CappedTrustpilot:
+    """Simule Trustpilot : 20 avis par page, filtre par note, et au-delà de la
+    page 10 la page 10 est renvoyée à nouveau (limite observée en vrai)."""
+
+    def __init__(self, ratings):
+        self.headers = {}
+        self.reviews = [
+            dict(make_review(i % 28 + 1, rating=r), id=f"r{i}") for i, r in enumerate(ratings)
+        ]
+        self.calls = []
+
+    def get(self, url, timeout=None):
+        from urllib.parse import parse_qs, urlparse
+
+        q = parse_qs(urlparse(url).query)
+        self.calls.append(q)
+        stars = {int(s) for s in q.get("stars", [])}
+        items = [r for r in self.reviews if not stars or r["rating"] in stars]
+        pages = max(1, -(-len(items) // 20))
+        page = min(int(q.get("page", ["1"])[0]), 10, pages)
+        return FakeResponse(200, make_page(items[(page - 1) * 20 : page * 20], pages))
+
+
+def test_ten_page_limit_is_bypassed_star_by_star():
+    ratings = [5] * 170 + [4] * 40 + [3] * 10 + [2] * 6 + [1] * 20  # 246 avis
+    progress = []
+    s = TrustpilotScraper(
+        "getstryde.co", fast_opts(), session=CappedTrustpilot(ratings), on_progress=progress.append
+    )
+    reviews = s.run()
+    assert len(reviews) == 246
+    assert "note par note" in s.warnings[0]
+    assert {p["label"] for p in progress} == {"", "5★", "4★", "3★", "2★", "1★"}
+
+
+def test_ten_page_limit_warns_when_one_rating_exceeds_it():
+    ratings = [5] * 230 + [1] * 16
+    s = TrustpilotScraper("getstryde.co", fast_opts(), session=CappedTrustpilot(ratings))
+    reviews = s.run()
+    assert len(reviews) == 216  # 200 (5★, plafonné) + 16 (1★)
+    assert any("Plus de 10 pages d'avis 5★" in w for w in s.warnings)
+
+
+def test_no_star_split_under_the_limit():
+    session = CappedTrustpilot([5] * 150 + [1] * 30)
+    s = TrustpilotScraper("getstryde.co", fast_opts(), session=session)
+    assert len(s.run()) == 180
+    assert s.warnings == []
+    assert len(session.calls) == 9

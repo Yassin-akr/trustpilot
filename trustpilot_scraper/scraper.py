@@ -195,14 +195,15 @@ class ScrapeOptions:
     engine: str = "auto"  # "auto" (HTTP, puis navigateur si bloqué), "http" ou "browser"
     show_browser: bool = False  # afficher la fenêtre du navigateur (mode navigateur)
 
-    def query(self, page: int) -> dict:
+    def query(self, page: int, stars: list[int] | None = None) -> dict:
+        stars = self.stars if stars is None else stars
         q: dict = {}
         if page > 1:
             q["page"] = page
         if self.languages:
             q["languages"] = self.languages
-        if self.stars:
-            q["stars"] = [str(s) for s in sorted(set(self.stars))]
+        if stars:
+            q["stars"] = [str(s) for s in sorted(set(stars))]
         return q
 
 
@@ -268,8 +269,8 @@ class TrustpilotScraper:
     def base_url(self) -> str:
         return f"https://{self.host}/review/{self.domain}"
 
-    def page_url(self, page: int) -> str:
-        q = urlencode(self.options.query(page), doseq=True)
+    def page_url(self, page: int, stars: list[int] | None = None) -> str:
+        q = urlencode(self.options.query(page, stars), doseq=True)
         return f"{self.base_url}?{q}" if q else self.base_url
 
     def _check_cancel(self):
@@ -281,14 +282,16 @@ class TrustpilotScraper:
         if self.cancel_event.wait(seconds):
             raise Cancelled()
 
-    def fetch_page(self, page: int, retries: int | None = None) -> dict | None:
+    def fetch_page(
+        self, page: int, retries: int | None = None, stars: list[int] | None = None
+    ) -> dict | None:
         """Retourne le JSON de la page, ou None si la page n'existe pas (404)."""
         retries = retries or self.options.retries
         last_err: Exception | None = None
         for attempt in range(1, retries + 1):
             self._check_cancel()
             try:
-                r = self.session.get(self.page_url(page), timeout=self.options.timeout)
+                r = self.session.get(self.page_url(page, stars), timeout=self.options.timeout)
                 if r.status_code == 404:
                     if page == 1:
                         raise NotFound(f"Marque introuvable sur Trustpilot : {self.domain}")
@@ -337,28 +340,64 @@ class TrustpilotScraper:
     def _run(self) -> list[dict]:
         first = self._fetch_first()
         self.business = extract_business(first)
+        stars = sorted(set(self.options.stars) or range(1, 6), reverse=True)
+        capped = self._scrape_pass(first, self.options.stars, label="")
+
+        # Trustpilot n'affiche que 10 pages : au-delà, il renvoie des avis déjà vus.
+        # On contourne en parcourant chaque note séparément (10 pages chacune).
+        if capped and not self.options.max_pages:
+            if len(stars) > 1:
+                self.warnings.append(
+                    "Trustpilot limite l'affichage à 10 pages : récupération note par note "
+                    "pour obtenir tous les avis."
+                )
+                for star in stars:
+                    self._sleep(self.options.delay)
+                    try:
+                        data = self.fetch_page(1, stars=[star])
+                    except ScraperError as e:
+                        self.warnings.append(f"{star}★ : {e}")
+                        continue
+                    if data and self._scrape_pass(data, [star], label=f"{star}★"):
+                        self.warnings.append(
+                            f"Plus de 10 pages d'avis {star}★ : certains peuvent manquer "
+                            "(filtre par langue pour les obtenir)."
+                        )
+            else:
+                self.warnings.append(
+                    "Trustpilot limite l'affichage à 10 pages : certains avis peuvent manquer."
+                )
+        return self.results()
+
+    def _scrape_pass(self, first: dict, stars: list[int], label: str) -> bool:
+        """Parcourt les pages d'une recherche. Retourne True si la limite de pages est atteinte."""
         pages = total_pages(first)
         if self.options.max_pages:
             pages = min(pages, self.options.max_pages)
 
-        reviews = self.collected
-        self._add(reviews, extract_reviews(first, self.host))
-        self._progress(1, pages, reviews)
+        items = extract_reviews(first, self.host)
+        seen = {r["id"] for r in items}
+        self._add(self.collected, items)
+        self._progress(1, pages, label)
 
         for p in range(2, pages + 1):
             self._sleep(self.options.delay)
             try:
-                data = self.fetch_page(p)
+                data = self.fetch_page(p, stars=stars)
             except ScraperError as e:
                 self.warnings.append(str(e))
                 continue
             if data is None:
                 self.warnings.append(f"Page {p} inaccessible (fin de pagination).")
-                break
-            self._add(reviews, extract_reviews(data, self.host))
-            self._progress(p, pages, reviews)
-
-        return self.results()
+                return True
+            items = extract_reviews(data, self.host)
+            ids = {r["id"] for r in items}
+            if not ids or ids <= seen:
+                return True  # page vide ou déjà vue : limite de pagination atteinte
+            seen |= ids
+            self._add(self.collected, items)
+            self._progress(p, pages, label)
+        return False
 
     def results(self) -> list[dict]:
         return sorted(self.collected.values(), key=lambda r: r["date"], reverse=True)
@@ -368,12 +407,13 @@ class TrustpilotScraper:
         for r in items:
             store[r["id"] or f"_{len(store)}"] = r
 
-    def _progress(self, page: int, pages: int, reviews: dict):
+    def _progress(self, page: int, pages: int, label: str = ""):
         self.on_progress(
             {
                 "page": page,
                 "pages": pages,
-                "count": len(reviews),
+                "label": label,
+                "count": len(self.collected),
                 "engine": self.engine_used,
                 "business": self.business,
             }

@@ -93,6 +93,11 @@ attends, augmente `--delay`, ou change de connexion (partage 4G, VPN).
 
 ## Bon à savoir
 
+- Trustpilot n'affiche que **10 pages** (200 avis) par recherche. Quand l'outil atteint cette limite,
+  il récupère automatiquement les avis **note par note** (10 pages par note) puis supprime les doublons.
+  Seule une note qui dépasse à elle seule 200 avis peut rester incomplète (un avertissement le signale) :
+  combine alors avec un filtre de langue.
+
 - Une pause (1,5 s par défaut) est respectée entre deux pages ; en cas d'erreur 429/5xx, la page est
   retentée avec un délai croissant, puis ignorée (signalée en avertissement) si elle échoue encore.
 - Trustpilot peut modifier son HTML ou limiter l'accès ; si `__NEXT_DATA__` disparaît, l'outil le signale.
